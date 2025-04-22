@@ -1,0 +1,156 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); 
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Customer Service Agent with Grok 3</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 flex justify-center items-center min-h-screen">
+  <div class="bg-white p-6 rounded-lg shadow-md w-full max-w-md">
+    <h1 class="text-2xl font-bold mb-4 text-center">AI Customer Service Agent</h1>
+
+    <!-- Query Input -->
+    <div class="mb-4">
+      <label class="block text-sm font-medium mb-1">Ask a Question</label>
+      <input
+        id="query"
+        type="text"
+        placeholder="E.g., What's the menu?"
+        class="w-full p-2 border rounded"
+      />
+      <button
+        onclick="handleQuery()"
+        class="w-full mt-2 bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
+      >
+        Ask
+      </button>
+    </div>
+
+    <!-- Response Display -->
+    <div id="response" class="mb-4 p-2 bg-gray-50 rounded hidden"></div>
+
+    <!-- Order Form -->
+    <div>
+      <h2 class="text-lg font-semibold mb-2">Place an Order</h2>
+      <select id="pizza" class="w-full p-2 border rounded mb-2">
+        <option value="">Select Pizza</option>
+        <option value="Margherita">Margherita ($10)</option>
+        <option value="Pepperoni">Pepperoni ($12)</option>
+        <option value="Veggie">Veggie ($11)</option>
+      </select>
+      <input
+        id="address"
+        type="text"
+        placeholder="Delivery Address"
+        class="w-full p-2 border rounded mb-2"
+      />
+      <button
+        onclick="placeOrder()"
+        class="w-full bg-green-500 text-white p-2 rounded hover:bg-green-600"
+      >
+        Place Order
+      </button>
+    </div>
+
+    <!-- Order Status -->
+    <div id="orderStatus" class="mt-4 p-2 bg-gray-50 rounded hidden"></div>
+  </div>
+
+  <script>
+    // Handle Query
+    async function handleQuery() {
+      const query = document.getElementById("query").value;
+      const responseDiv = document.getElementById("response");
+      if (!query) {
+        responseDiv.textContent = "Please enter a question.";
+        responseDiv.classList.remove("hidden");
+        return;
+      }
+
+      try {
+        const res = await fetch("http://localhost:3000/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query })
+        });
+        const data = await res.json();
+        responseDiv.textContent = data.response || "Error: Could not get a response.";
+        responseDiv.classList.remove("hidden");
+        document.getElementById("query").value = "";
+      } catch (error) {
+        responseDiv.textContent = "Error: Failed to connect to the server.";
+        responseDiv.classList.remove("hidden");
+      }
+    }
+
+    // Handle Order
+    async function placeOrder() {
+      const pizza = document.getElementById("pizza").value;
+      const address = document.getElementById("address").value;
+      const statusDiv = document.getElementById("orderStatus");
+
+      if (!pizza || !address) {
+        statusDiv.textContent = "Please select a pizza and enter an address.";
+        statusDiv.classList.remove("hidden");
+        return;
+      }
+
+      try {
+        const res = await fetch("http://localhost:3000/order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pizza, address })
+        });
+        const data = await res.json();
+        statusDiv.textContent = data.status;
+        statusDiv.classList.remove("hidden");
+        document.getElementById("pizza").value = "";
+        document.getElementById("address").value = "";
+      } catch (error) {
+        statusDiv.textContent = "Error: Failed to process the order.";
+        statusDiv.classList.remove("hidden");
+      }
+    }
+  </script>
+</body>
+</html>
